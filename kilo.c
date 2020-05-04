@@ -12,7 +12,7 @@ void enableRawMode() {
  // fourth bit from right. 
  // c_lflag is for local flags, described as a "dumping ground for other state."
  // by doing this, we will not see what we type bc of the mod to c_lflag telling it not to ECHO. 
-raw.c_lflag &= ~(ECHO);
+ raw.c_lflag &= ~(ECHO);
 
  // after modification of struct in tcgetattr(), it can be applied to terminal
  // using this function. TCSAFLUSH specifies when to apply the change: here we apply
