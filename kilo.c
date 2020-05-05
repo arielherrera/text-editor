@@ -1,3 +1,5 @@
+#include <ctype.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <termios.h>
 #include <unistd.h>
@@ -41,6 +43,17 @@ int main() {
  enableRawMode();
 
  char c;
- while (read(STDIN_FILENO, &c, 1) == 1 && c != 'q');
- return 0;
+ while (read(STDIN_FILENO, &c, 1) == 1 && c != 'q') {
+  // iscntrl() tests to see if c is a control character
+  // cntrl chars are nonprintable chars that we don't want to print to screen
+  // ASCII codes 0-31 and 127 are cntrl chars. 
+  if (iscntrl(c)) {
+   // formatted byte to ASCII code decimal number
+   printf("%d\n", c);
+  } else {
+   // %c tells us to write out the byte directly as a char
+   printf("%d ('%c')\n", c, c); 
+  }
+ } 
+return 0;
 }
