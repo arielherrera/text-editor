@@ -21,6 +21,12 @@ void enableRawMode() {
  atexit(disableRawMode);
 
  struct termios raw = orig_termios;
+ // I (in this case) stands for 'input flag' and XON comes from the names of the two cntrl chars
+ // that ctrl-s and q produce: XOFF to pause transmission and XON to resume transmission, respectively
+ // ctrl-s and q are read as 19 byte and 17 byte, respectively. 
+ // I stands for 'input flag,' CR for 'carriage return,' and NL for 'new line'
+ // this ^ disables crtl-m which makes the terminal translate any carraige returns into new lines.
+ raw.c_lflag &= ~(IXON | ICRNL);
 
  // using the bitwise-NOT operator, we get a 0 in fourth bit from right
  // then bitwise-AND with flag field to force all flag fields to become 0 in 
@@ -29,7 +35,13 @@ void enableRawMode() {
  // by doing this, we will not see what we type bc of the mod to c_lflag telling it not to ECHO. 
  // ICANON is a local flag in the c_lflag field, it allows us to turn off canonical mode
  // this means we'll be reading input byte by byte, intead of line by line.
- raw.c_lflag &= ~(ECHO | ICANON);
+ // ISIG means ctrl-c and z can be read as 3 byte and 26 byte, respectively.
+ // this also disables ctrl-y on macOS
+ // IEXTEN (belonging to the c_lflag field), disables ctrl-v and ctrl-o (discards ctrl char) in macOS
+ // in which the terminal would've waited for use to type another char and then send that
+ // char literally, eg., before we displayed ctrl-c, we might've been able to type ctrl-v 
+ // and then ctrl-c to input a 3 byte. 
+ raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
 
  // after modification of struct in tcgetattr(), it can be applied to terminal
  // using this function. TCSAFLUSH specifies when to apply the change: here we apply
