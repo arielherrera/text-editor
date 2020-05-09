@@ -37,11 +37,13 @@ void enableRawMode() {
 
  // OPOST flag formats each "\n" we enter in editor as "\r\n" where "\r" returns curson to start of line.
  raw.c_oflag &= ~(OPOST);
+
  /*
  CS8 isn't a flag, its a bit mask with multiple bits, which we can set using biwise OR, it sets
- the character size (CS) to 8 bits per byte. 
+ the character size (CS) to 8 bits per byte.
  */
  raw.c_cflag |= (CS8);
+
  /*
  using the bitwise-NOT operator, we get a 0 in fourth bit from right
  then bitwise-AND with flag field to force all flag fields to become 0 in
