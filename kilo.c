@@ -1,19 +1,34 @@
+/*** includes ***/
+
 #include <ctype.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <termios.h>
 #include <unistd.h>
 
+/*** data ***/
+
 struct termios orig_termios;
+
+/*** terminal ***/
+
+void die(const char *s) {
+  // looks at global errno var and prints descriptive error message for it, also prints string given to provide context
+  perror(s);
+  exit(1);
+}
 
 void disableRawMode() {
  // this allows for the terminal to exit Raw Mode and allow displaying of text
- tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
+ if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios) == -1)
+ // after printing error message and passed in string, program will exit(1)
+ die("tcsetattr");
 }
 
 void enableRawMode() {
  // reads in terminal attributes to struct raw
- tcgetattr(STDIN_FILENO, &orig_termios);
+ if (tcgetattr(STDIN_FILENO, &orig_termios) == -1) die("tcgetattr");
 
  /*
 
@@ -62,20 +77,37 @@ void enableRawMode() {
  raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
 
  /*
+ VMIN and VTIME are indices into the c_cc field, which stands for "control characters," an array of bytes
+ that control various terminal settings.
+ VMIN is the minimum number of bytes of input needed before read() can returns
+ VTIME sets the max amount of time to wait before read() returns. It is in tenths of a second (100ms)
+ if read() times out it will return 0, which makes sense bc its usual return value is the number of bytes read
+ */
+ raw.c_cc[VMIN] = 0;
+ raw.c_cc[VTIME] = 1;
+
+ /*
  after modification of struct in tcgetattr(), it can be applied to terminal
  using this function. TCSAFLUSH specifies when to apply the change: here we apply
  after all pending output has been written to the terminal and discards any
  input that hasn't been read.
  */
- tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+ if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1) die("tcsetattr");
 }
+
+/*** init ***/
 
 int main() {
  // causing each key typed to not be printed to terminal
  enableRawMode();
 
- char c;
- while (read(STDIN_FILENO, &c, 1) == 1 && c != 'q') {
+ while (1) {
+   char c = '\0';
+  /*
+   in Cygwin, which is a POSIX compatible environment that runs natively on Microsoft Windows,
+   when read() times out it returns -1 with an error of EAGIN, instead of just returing 0 how we want it to.
+  */
+  if (read(STDIN_FILENO, &c, 1) == -1 && errno != EAGAIN) die("read");
 
   /*
   iscntrl() tests to see if c is a control character
@@ -89,6 +121,8 @@ int main() {
    // %c tells us to write out the byte directly as a char
    printf("%d ('%c')\r\n", c, c);
   }
+  if (c == 'q') break; // this is a great way to format a final 'break if' statment in C
  }
+
 return 0;
 }
