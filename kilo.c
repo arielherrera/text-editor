@@ -7,6 +7,15 @@
 #include <termios.h>
 #include <unistd.h>
 
+/*** defines ***/
+
+/*
+bitwise ANDs a char with value 00011111, setting the upper three bits of the char
+to 0s, this mirrors what the Ctrl key does in the terminal: it strips bits 5 and 6 from whatever
+key you press in combination with Ctrl, and send that
+*/
+#define CTRL_KEY(k) ((k) & 0x1f)
+
 /*** data ***/
 
 struct termios orig_termios;
@@ -14,7 +23,24 @@ struct termios orig_termios;
 /*** terminal ***/
 
 void die(const char *s) {
-  // looks at global errno var and prints descriptive error message for it, also prints string given to provide context
+  /*
+  we are writing an escape sequence; the 4 in write() means we are writing 4 bytes out to terminal
+  the first byte is '\x1b' which is the escape character, or 27 in decimal.
+  the other three bytes are [2J
+  escape sequences always start with an escape char followed by the '[' char
+  J is used to clear the screen, and the argument 2 tells us that we want to clear the entire screen
+  <esc>[1J would clear the screen up to the cursor, <esc>[0J would clear from the cursor to end of screen
+  */
+  write(STDOUT_FILENO, "\x1b[2J", 4);
+  /*
+  H command repositions the cursor, it takes 2 args: the row and column num for where to put the cursor
+  both default args for H are 1, so we leave them as is (r and c numbered from 1, not 0)
+  */
+  write(STDOUT_FILENO, "\x1b[H", 3);
+
+  /*
+  looks at global errno var and prints descriptive error message for it, also prints string given to provide context
+  */
   perror(s);
   exit(1);
 }
@@ -95,33 +121,90 @@ void enableRawMode() {
  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1) die("tcsetattr");
 }
 
+/*
+waits for one keypress and returns it
+*/
+char editorReadKey() {
+  int nread;
+  char c;
+  while ((nread = read(STDIN_FILENO, &c, 1)) != 1) {
+    if (nread == -1 && errno != EAGAIN) die("read");
+  }
+  return c;
+}
+
+/*** output ***/
+
+/*
+
+*/
+void editorDrawRows() {
+  int y;
+  for (y = 0; y < 24; ++y) {
+    write(STDOUT_FILENO, "~\r\n", 3);
+  }
+}
+
+void editorRefreshScreen() {
+  /*
+  we are writing an escape sequence; the 4 in write() means we are writing 4 bytes out to terminal
+  the first byte is '\x1b' which is the escape character, or 27 in decimal.
+  the other three bytes are [2J
+  escape sequences always start with an escape char followed by the '[' char
+  J is used to clear the screen, and the argument 2 tells us that we want to clear the entire screen
+  <esc>[1J would clear the screen up to the cursor, <esc>[0J would clear from the cursor to end of screen
+  */
+  write(STDOUT_FILENO, "\x1b[2J", 4);
+  /*
+  H command repositions the cursor, it takes 2 args: the row and column num for where to put the cursor
+  both default args for H are 1, so we leave them as is (r and c numbered from 1, not 0)
+  */
+  write(STDOUT_FILENO, "\x1b[H", 3);
+
+  editorDrawRows();
+
+  write(STDOUT_FILENO, "\x1b[H", 3);
+}
+
+/*** input ***/
+
+/*
+waits for a keypress and handles it
+*/
+void editorProcessKeypress() {
+  char c = editorReadKey();
+
+  switch (c) {
+    case CTRL_KEY('q'):
+      /*
+      we are writing an escape sequence; the 4 in write() means we are writing 4 bytes out to terminal
+      the first byte is '\x1b' which is the escape character, or 27 in decimal.
+      the other three bytes are [2J
+      escape sequences always start with an escape char followed by the '[' char
+      J is used to clear the screen, and the argument 2 tells us that we want to clear the entire screen
+      <esc>[1J would clear the screen up to the cursor, <esc>[0J would clear from the cursor to end of screen
+      */
+      write(STDOUT_FILENO, "\x1b[2J", 4);
+      /*
+      H command repositions the cursor, it takes 2 args: the row and column num for where to put the cursor
+      both default args for H are 1, so we leave them as is (r and c numbered from 1, not 0)
+      */
+      write(STDOUT_FILENO, "\x1b[H", 3);
+      exit(0);
+      break;
+  }
+}
+
 /*** init ***/
 
 int main() {
- // causing each key typed to not be printed to terminal
+  /*
+ causing each key typed to not be printed to terminal
+ */
  enableRawMode();
 
  while (1) {
-   char c = '\0';
-  /*
-   in Cygwin, which is a POSIX compatible environment that runs natively on Microsoft Windows,
-   when read() times out it returns -1 with an error of EAGIN, instead of just returing 0 how we want it to.
-  */
-  if (read(STDIN_FILENO, &c, 1) == -1 && errno != EAGAIN) die("read");
-
-  /*
-  iscntrl() tests to see if c is a control character
-  cntrl chars are nonprintable chars that we don't want to print to screen
-  ASCII codes 0-31 and 127 are cntrl chars.
-  */
-  if (iscntrl(c)) {
-   // formatted byte to ASCII code decimal number
-   printf("%d\r\n", c);
-  } else {
-   // %c tells us to write out the byte directly as a char
-   printf("%d ('%c')\r\n", c, c);
-  }
-  if (c == 'q') break; // this is a great way to format a final 'break if' statment in C
+   editorProcessKeypress();
  }
 
 return 0;
