@@ -8,4 +8,4 @@ Currently building this project on Mac OS!
 
 The kilo source code is released under the [BSD 2-Clause](https://github.com/arielherrera/text-editor/blob/master/Attribution) license
 
-The rest of the tutorial is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+Tutorial used is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
