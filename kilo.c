@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -18,7 +19,16 @@ key you press in combination with Ctrl, and send that
 
 /*** data ***/
 
-struct termios orig_termios;
+/*
+global struct that contains our editor state, used to store width and height of the terminal
+*/
+struct editorConfig {
+    int screenrows;
+    int screencols;
+    struct termios orig_termios;
+};
+
+struct editorConfig E;
 
 /*** terminal ***/
 
@@ -47,21 +57,21 @@ void die(const char *s) {
 
 void disableRawMode() {
  // this allows for the terminal to exit Raw Mode and allow displaying of text
- if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios) == -1)
+ if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &E.orig_termios) == -1)
  // after printing error message and passed in string, program will exit(1)
  die("tcsetattr");
 }
 
 void enableRawMode() {
  // reads in terminal attributes to struct raw
- if (tcgetattr(STDIN_FILENO, &orig_termios) == -1) die("tcgetattr");
+ if (tcgetattr(STDIN_FILENO, &E.orig_termios) == -1) die("tcgetattr");
 
  /*
 
  */
  atexit(disableRawMode);
 
- struct termios raw = orig_termios;
+ struct termios raw = E.orig_termios;
 
 
  /*
@@ -133,6 +143,54 @@ char editorReadKey() {
   return c;
 }
 
+/*
+
+*/
+int getCursorPosition(int *rows, int *cols) {
+  char buf[32];
+  unsigned int i = 0;
+
+  if (write(STDOUT_FILENO, "\x1b[6n", 4) != 4) return -1;
+
+  while (i < sizeof(buf) - 1) {
+    if (read(STDIN_FILENO, &buf[i], 1) != 1) break;
+    if (buf[i] == 'R') break;
+    ++i;
+  }
+
+  buf[i] = '\0';
+
+  if (buf[0] != '\x1b' || buf[1] != '[') return -1;
+  if (sscanf(&buf[2], "%d;%d", rows, cols) != 2) return -1;
+
+  return 0;
+}
+
+/*
+I opted to get the window size the hard way, since ioctl() isn't guaranteed to be able to request the window size on all systems
+using the 999C and 999B commands, we, respectively, move the cursor to the right then down to ensure the cursor
+reaches the right and bottom edges of the screen
+the C and B commands are specifically documented to stop the cursor from going off the screen
+*/
+int getWindowSize(int *rows, int *cols) {
+  struct winsize ws;
+
+  if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
+    /*
+    if the write doesn't consist of 12 bytes of info, then return -1... but what would prompt the write NOT to output the full 12?
+    */
+    if (write(STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
+    /*
+    since in our first if (currently, we are using 1, and are always returning -1), we use editorReadKey() to observe the
+    results of our escape sequences before the program exits by calling die().
+    */
+    return getCursorPosition(rows, cols);
+  } else {
+    *cols = ws.ws_col;
+    *rows = ws.ws_row;
+    return 0;
+  }
+}
 /*** output ***/
 
 /*
@@ -140,8 +198,12 @@ char editorReadKey() {
 */
 void editorDrawRows() {
   int y;
-  for (y = 0; y < 24; ++y) {
-    write(STDOUT_FILENO, "~\r\n", 3);
+  for (y = 0; y < E.screenrows; ++y) {
+    write(STDOUT_FILENO, "~", 1);
+
+    if (y < E.screenrows - 1) {
+      write(STDOUT_FILENO, "\r\n", 2);
+    }
   }
 }
 
@@ -197,11 +259,17 @@ void editorProcessKeypress() {
 
 /*** init ***/
 
+void initEditor() {
+  if (getWindowSize(&E.screenrows, &E.screencols) == -1) die("getWindowSize");
+}
+
 int main() {
   /*
  causing each key typed to not be printed to terminal
  */
  enableRawMode();
+
+ initEditor();
 
  while (1) {
    editorRefreshScreen();
