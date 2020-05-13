@@ -4,4 +4,8 @@ Learning how to make my own text editor named "kilo," using tutorial found on ht
 
 Currently building this project on Mac OS!
 
-## Licensing
+## License
+
+The kilo source code is released under the BSD 2-Clause license.
+
+The rest of the tutorial is licensed under CC BY 4.0.
