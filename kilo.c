@@ -201,21 +201,32 @@ it consists of a pointer to our buffer in memory and a length
 we define an ABUF_INIT constant which represents an empty buffer, this acts as a constructor to our abuf type
 */
 struct abuf {
-  char *b;
+  char *b; // b is the buffer of chars
   int len;
 };
 
 #define ABUF_INIT {NULL, 0}
-
+/*
+abuf is our buffer, s is the string we're appending, and len is the len of the string s
+We need to allocate enough mem to hold the new string, we ask realloc() to give us a block of mem
+that is the size of the current string plus the size of the sting we're appending
+realloc() will either extend the size of the block of mem we currently have
+allocated to make due, or it will use free() to free the current mem space
+and will find another space that is big enough to fit the buffer and the
+string being appended.
+*/
 void abAppend(struct abuf *ab, const char *s, int len) {
-  char *new = realloc(ab->b, ab->len + len);
+  char *new = realloc(ab->b, ab->len + len); // attemps to resize mem block pointed to by ab
 
-  if (new == NULL) return;
-  memcpy(&new[ab->len], s, len);
-  ab->b = new;
-  ab->len += len;
+  if (new == NULL) return; // NULL returns if request for mem fails
+  memcpy(&new[ab->len], s, len); // after space has been made, s is appended where the previous string in ab ended
+  ab->b = new; // b points to new now
+  ab->len += len; // new len is added to total from previous len
+  // since new is allocated statically, exit from this function will return that created to memory
+  // since ab got updated it is saved
 }
 
+// dtor
 void abFree(struct abuf *ab) {
   free(ab->b);
 }
@@ -224,36 +235,43 @@ void abFree(struct abuf *ab) {
 /*
 
 */
-void editorDrawRows() {
+void editorDrawRows(struct abuf *ab) {
   int y;
   for (y = 0; y < E.screenrows; ++y) {
-    write(STDOUT_FILENO, "~", 1);
+    abAppend(ab, "~", 1);
 
     if (y < E.screenrows - 1) {
-      write(STDOUT_FILENO, "\r\n", 2);
+      abAppend(ab, "\r\n", 2);
     }
   }
 }
 
 void editorRefreshScreen() {
-  /*
-  we are writing an escape sequence; the 4 in write() means we are writing 4 bytes out to terminal
-  the first byte is '\x1b' which is the escape character, or 27 in decimal.
-  the other three bytes are [2J
-  escape sequences always start with an escape char followed by the '[' char
-  J is used to clear the screen, and the argument 2 tells us that we want to clear the entire screen
-  <esc>[1J would clear the screen up to the cursor, <esc>[0J would clear from the cursor to end of screen
-  */
-  write(STDOUT_FILENO, "\x1b[2J", 4);
+    struct abuf ab = ABUF_INIT;
+
+    abAppend(&ab, "\x1b[?25l", 6); // corrects for terminal cursor flicker in later VT models
+    /*
+    we are writing an escape sequence; the 4 in write() means we are writing 4 bytes out to terminal
+      the first byte is '\x1b' which is the escape character, or 27 in decimal.
+      the other three bytes are [2J
+      escape sequences always start with an escape char followed by the '[' char
+      J is used to clear the screen, and the argument 2 tells us that we want to clear the entire screen
+      <esc>[1J would clear the screen up to the cursor, <esc>[0J would clear from the cursor to end of screen
+      */
+  abAppend(&ab, "\x1b[2J", 4); // clears whole screen
   /*
   H command repositions the cursor, it takes 2 args: the row and column num for where to put the cursor
   both default args for H are 1, so we leave them as is (r and c numbered from 1, not 0)
   */
-  write(STDOUT_FILENO, "\x1b[H", 3);
+  abAppend(&ab, "\x1b[H", 3); // repositions cursor
 
-  editorDrawRows();
+  editorDrawRows(&ab);
 
-  write(STDOUT_FILENO, "\x1b[H", 3);
+  abAppend(&ab, "\x1b[H", 3); // after drawing, repositions cursor
+    abAppend(&ab, "\x1b[?25h", 6);
+
+  write(STDOUT_FILENO, ab.b, ab.len); // .b gives us buffer, while ->b accesses buffer
+  abFree(&ab);
 }
 
 /*** input ***/
